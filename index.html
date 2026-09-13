@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+  <html lang="ja">
+  <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>通話中おこしアプリ</title>
+  <style>
+    :root {
+      color-scheme: dark;
+}
+  * { box-sizing: border-box; }
+  html, body {
+        margin: 0;
+    padding: 0;
+    height: 100%;
+    background: #12131a;
+    color: #f4f4f8;
+        font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic", sans-serif;
+    -webkit-tap-highlight-color: transparent;
+}
+  #app {
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    text-align: center;
+}
+  h1 {
+        font-size: 1.3rem;
+    margin: 0 0 8px;
+    font-weight: 600;
+}
+  p.sub {
+    color: #9a9ab0;
+    font-size: 0.9rem;
+    margin: 0 0 32px;
+    line-height: 1.6;
+  }
+  .role-buttons {
+        display: flex;
+    flex-direction: column;
+    gap: 16px;
+    width: 100%;
+    max-width: 360px;
+}
+  button {
+        font: inherit;
+    border: none;
+    border-radius: 16px;
+    padding: 20px;
+    font-size: 1.05rem;
+    font-weight: 700;
+    cursor: pointer;
+    -webkit-appearance: none;
+}
+  .btn-primary {
+        background: #4f6bff;
+    color: white;
+}
+  .btn-secondary {
+        background: #2a2b38;
+    color: #f4f4f8;
+    }
+  .btn-wake {
+        background: #ff4d5e;
+        color: white;
+    width: 100%;
+    max-width: 320px;
+    aspect-ratio: 1 / 1;
+    border-radius: 50%;
+    font-size: 1.4rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 0 0 0 rgba(255,77,94,0.5);
+    animation: pulse 2s infinite;
+}
+  @keyframes pulse {
+        0% { box-shadow: 0 0 0 0 rgba(255,77,94,0.45); }
+    70% { box-shadow: 0 0 0 22px rgba(255,77,94,0); }
+    100% { box-shadow: 0 0 0 0 rgba(255,77,94,0); }
+}
+  .btn-wake:active { transform: scale(0.97); }
+        #status {
+          margin-top: 24px;
+        font-size: 0.9rem;
+    color: #9a9ab0;
+    min-height: 1.4em;
+}
+  #backLink {
+    margin-top: 40px;
+    color: #6a6b80;
+    font-size: 0.8rem;
+    text-decoration: underline;
+    cursor: pointer;
+}
+  .waiting-icon {
+        font-size: 3.5rem;
+    margin-bottom: 12px;
+}
+  .hidden { display: none !important; }
+
+  /* --- Alarm / flashing state --- */
+  body.alarm {
+    animation: flashbg 0.5s steps(1) infinite;
+  }
+  @keyframes flashbg {
+    0%, 49% { background: #ff2d3d; }
+          50%, 100% { background: #ffffff; }
+      }
+  body.alarm #app { color: #12131a; }
+  body.alarm h1, body.alarm p.sub, body.alarm #status { color: inherit; }
+      .alarm-text {
+        font-size: 2.4rem;
+    font-weight: 900;
+    margin-bottom: 24px;
+    animation: shake 0.25s infinite;
+    }
+  @keyframes shake {
+    0% { transform: rotate(-2deg); }
+    50% { transform: rotate(2deg); }
+    100% { transform: rotate(-2deg); }
+}
+  .btn-stop {
+        background: #12131a;
+    color: white;
+    padding: 22px 36px;
+    border-radius: 16px;
+    font-size: 1.2rem;
+}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- Role selection -->
+    <div id="view-select">
+    <h1>通話中おこしアプリ 📞💤</h1>
+      <p class="sub">LINE通話中に寝落ちしてしまう問題を解決するための、二人用の簡易ツールです。<br>役割を選んでください。</p>
+      <div class="role-buttons">
+        <button class="btn-primary" id="btn-role-wake">自分は「起こす側」</button>
+        <button class="btn-secondary" id="btn-role-wait">自分は「待つ側(寝落ちする方)」</button>
+        </div>
+      <div id="status"></div>
+    </div>
+
+  <!-- Waker view -->
+  <div id="view-wake" class="hidden">
+      <h1>起こす側</h1>
+      <p class="sub">彼女の反応がなくなったら、下のボタンを押してください。<br>彼女の画面に音とフラッシュで通知が届きます。</p>
+    <button class="btn-wake" id="btn-send">起こす</button>
+    <div id="status-wake">準備完了</div>
+      <div id="backLink" data-target="select">役割選択に戻る</div>
+    </div>
+
+  <!-- Waiter view (idle) -->
+    <div id="view-wait-idle" class="hidden">
+    <h1>待つ側(あなた)</h1>
+    <p class="sub">「待機開始」を押すと、この画面を開いたままにしてください。<br>音を鳴らす許可が必要なので、必ずこのボタンからスタートしてください。</p>
+          <button class="btn-primary" id="btn-start-waiting">待機開始</button>
+    <div id="backLink2" data-target="select">役割選択に戻る</div>
+    </div>
+
+    <!-- Waiter view (listening) -->
+  <div id="view-wait-listening" class="hidden">
+      <div class="waiting-icon">🌙</div>
+      <h1>待機中...</h1>
+      <p class="sub">通話中はこの画面を前面に表示したままにしてください。<br>信号が届くとここが光って音が鳴ります。</p>
+      <div id="status-wait">サーバーに接続中...</div>
+    </div>
+
+    <!-- Waiter view (ALARM) -->
+    <div id="view-alarm" class="hidden">
+      <div class="alarm-text">起きて！📞</div>
+      <button class="btn-stop" id="btn-stop-alarm">タップして止める</button>
+    </div>
+
+  </div>
+
+  <!-- Firebase (compat SDK) -->
+  <script src="https://www.gstatic.com/firebasejs/10.13.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.13.1/firebase-database-compat.js"></script>
+  <script>
+  (function () {
+    "use strict";
+
+  const firebaseConfig = {
+        apiKey: "AIzaSyC0D91UtISUKhprFoiU-_Eyb4wTwaTaIH8",
+              authDomain: "wakeup-call-app.firebaseapp.com",
+              databaseURL: "https://wakeup-call-app-default-rtdb.firebaseio.com",
+              projectId: "wakeup-call-app",
+              storageBucket: "wakeup-call-app.firebasestorage.app",
+              messagingSenderId: "473426470625",
+              appId: "1:473426470625:web:d8c1141562f18c7b9bb9a0"
+          };
+
+  const SIGNAL_PATH = "rooms/shinya_rinka/wakeSignal";
+
+  let app, db, signalRef;
+  let wakeLock = null;
+  let audioCtx = null;
+  let alarmNodes = null;
+  let alarmInterval = null;
+  let lastSeenTimestamp = 0;
+  let firebaseReady = false;
+
+  function initFirebase() {
+    try {
+      app = firebase.initializeApp(firebaseConfig);
+      db = firebase.database();
+      signalRef = db.ref(SIGNAL_PATH);
+      firebaseReady = true;
+} catch (e) {
+      console.error("Firebase init failed", e);
+      firebaseReady = false;
+}
+}
+
+  const views = {
+    select: document.getElementById("view-select"),
+    wake: document.getElementById("view-wake"),
+    waitIdle: document.getElementById("view-wait-idle"),
+    waitListening: document.getElementById("view-wait-listening"),
+    alarm: document.getElementById("view-alarm"),
+};
+  function showView(name) {
+    Object.values(views).forEach(v => v.classList.add("hidden"));
+    views[name].classList.remove("hidden");
+}
+
+  document.getElementById("btn-role-wake").addEventListener("click", () => {
+    showView("wake");
+    setupWaker();
+});
+  document.getElementById("btn-role-wait").addEventListener("click", () => {
+    showView("waitIdle");
+});
+  document.querySelectorAll("#backLink, #backLink2").forEach(el => {
+    el.addEventListener("click", () => {
+      teardownListening();
+      showView("select");
+});
+});
+
+  function setupWaker() {
+    if (!firebaseReady) initFirebase();
+    const btn = document.getElementById("btn-send");
+    const status = document.getElementById("status-wake");
+    btn.addEventListener("click", () => {
+      if (!firebaseReady) {
+        status.textContent = "接続エラー: Firebase設定を確認してください";
+        return;
+}
+      status.textContent = "送信中...";
+      signalRef.set({
+        timestamp: firebase.database.ServerValue.TIMESTAMP,
+        by: "wake-button"
+}).then(() => {
+        status.textContent = "送信しました！(" + new Date().toLocaleTimeString() + ")";
+}).catch(err => {
+        status.textContent = "送信失敗: " + err.message;
+});
+}, { once: false });
+}
+
+  document.getElementById("btn-start-waiting").addEventListener("click", async () => {
+    if (!firebaseReady) initFirebase();
+    primeAudio();
+    await requestWakeLock();
+    startListening();
+});
+
+  document.getElementById("btn-stop-alarm").addEventListener("click", () => {
+    stopAlarmSound();
+    showView("waitListening");
+});
+
+  function primeAudio() {
+    try {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const buffer = audioCtx.createBuffer(1, 1, 22050);
+      const src = audioCtx.createBufferSource();
+      src.buffer = buffer;
+      src.connect(audioCtx.destination);
+      src.start(0);
+} catch (e) {
+      console.error("AudioContext init failed", e);
+}
+}
+
+  async function requestWakeLock() {
+    try {
+      if ("wakeLock" in navigator) {
+        wakeLock = await navigator.wakeLock.request("screen");
+        document.addEventListener("visibilitychange", async () => {
+          if (wakeLock !== null && document.visibilityState === "visible") {
+            try { wakeLock = await navigator.wakeLock.request("screen"); } catch (e) {}
+}
+});
+}
+} catch (e) {
+      console.error("Wake Lock request failed", e);
+}
+}
+
+  function startListening() {
+    showView("waitListening");
+    const status = document.getElementById("status-wait");
+    if (!firebaseReady) {
+      status.textContent = "接続エラー: Firebase設定を確認してください";
+      return;
+}
+    status.textContent = "接続完了。待機中です。";
+
+    signalRef.once("value").then(snap => {
+      const val = snap.val();
+      lastSeenTimestamp = (val && val.timestamp) ? val.timestamp : 0;
+      signalRef.on("value", handleSignal);
+}).catch(() => {
+      signalRef.on("value", handleSignal);
+});
+}
+
+  function handleSignal(snap) {
+    const val = snap.val();
+    if (!val || !val.timestamp) return;
+    if (val.timestamp > lastSeenTimestamp) {
+      lastSeenTimestamp = val.timestamp;
+      triggerAlarm();
+}
+}
+
+  function teardownListening() {
+    if (signalRef) signalRef.off("value", handleSignal);
+    stopAlarmSound();
+    if (wakeLock) { try { wakeLock.release(); } catch (e) {} wakeLock = null; }
+}
+
+  function triggerAlarm() {
+    showView("alarm");
+    document.body.classList.add("alarm");
+    if (navigator.vibrate) {
+      navigator.vibrate([400, 200, 400, 200, 400, 200, 400]);
+}
+    playAlarmSound();
+}
+
+  function playAlarmSound() {
+    if (!audioCtx) {
+      try {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+} catch (e) { return; }
+}
+    if (audioCtx.state === "suspended") {
+      audioCtx.resume().catch(() => {});
+}
+    stopAlarmSound();
+
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = "square";
+    gain.gain.value = 1.0;
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start();
+
+    let high = true;
+    osc.frequency.value = 880;
+    alarmInterval = setInterval(() => {
+      high = !high;
+      osc.frequency.value = high ? 880 : 660;
+}, 300);
+
+    alarmNodes = { osc, gain };
+}
+
+  function stopAlarmSound() {
+    document.body.classList.remove("alarm");
+    if (alarmInterval) { clearInterval(alarmInterval); alarmInterval = null; }
+    if (alarmNodes) {
+      try { alarmNodes.osc.stop(); } catch (e) {}
+      try { alarmNodes.osc.disconnect(); } catch (e) {}
+      try { alarmNodes.gain.disconnect(); } catch (e) {}
+      alarmNodes = null;
+}
+}
+
+  initFirebase();
+})();
+</script>
+</body>
+</html>
